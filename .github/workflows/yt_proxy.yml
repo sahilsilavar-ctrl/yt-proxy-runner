@@ -48,6 +48,7 @@ jobs:
               
               git config user.name "GitHub Actions"
               git config user.email "actions@github.com"
+              git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
               
               git fetch origin active_proxy || true
               git checkout active_proxy 2>/dev/null || git checkout -b active_proxy
