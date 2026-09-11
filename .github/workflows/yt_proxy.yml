@@ -5,7 +5,8 @@ on:
     inputs:
       profile_id:
         description: 'Profile ID for isolated proxy'
-        required: true
+        required: false
+        type: string
         default: 'default'
 
 permissions:
@@ -17,8 +18,6 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install microsocks
         run: |
@@ -31,7 +30,7 @@ jobs:
         run: |
           PUBLIC_IP=$(curl -s https://api.ipify.org)
           echo "GitHub Runner Public IP: $PUBLIC_IP"
-          PROFILE_ID="${{ github.event.inputs.profile_id }}"
+          PROFILE_ID="${{ inputs.profile_id }}"
           if [ -z "$PROFILE_ID" ]; then
             PROFILE_ID="default"
           fi
@@ -40,7 +39,7 @@ jobs:
           ssh -p 443 -R0:localhost:1080 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o UserKnownHostsFile=/dev/null tcp@a.pinggy.io > pinggy.log 2>&1 &
           
           echo "Waiting for Pinggy tunnel..."
-          for i in {1..25}; do
+          for i in $(seq 1 25); do
             sleep 2
             URL=$(grep -oE "tcp://[a-zA-Z0-9.-]+:[0-9]+" pinggy.log | head -n 1 || true)
             if [ -n "$URL" ]; then
@@ -54,21 +53,13 @@ jobs:
               git checkout active_proxy 2>/dev/null || git checkout -b active_proxy
               
               mkdir -p proxies
-              cat <<EOF > "proxies/${PROFILE_ID}.json"
-{
-  "profile_id": "$PROFILE_ID",
-  "proxy": "$PROXY_ADDR",
-  "ip": "$PUBLIC_IP",
-  "timestamp": $(date +%s)
-}
-EOF
-              
+              echo "{\"profile_id\": \"$PROFILE_ID\", \"proxy\": \"$PROXY_ADDR\", \"ip\": \"$PUBLIC_IP\", \"timestamp\": $(date +%s)}" > "proxies/${PROFILE_ID}.json"
               cp "proxies/${PROFILE_ID}.json" proxy.json
               
               git add proxies/ proxy.json
               git commit -m "Update proxy for ${PROFILE_ID} [skip ci]" || true
               
-              for push_retry in {1..5}; do
+              for r in $(seq 1 5); do
                 git pull origin active_proxy --rebase || true
                 if git push origin active_proxy; then
                   echo "Successfully published proxy for ${PROFILE_ID}!"
